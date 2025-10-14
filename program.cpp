@@ -20,6 +20,7 @@
 #include <termios.h>
 #include <time.h>
 #include <unistd.h>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -153,25 +154,12 @@ class Line {
         return rx;
     }
 
-    // void remove() {
-    //     if (owner) {
-    //         auto self = shared_from_this();
-    //         owner->kill(*this);
-    //     }
-    // }
-    //
-    // Line(Editor *owner, std::string contents)
-    //     : owner(owner), chars(std::move(contents)) {
-    //     update();
-    // }
-
     Line(std::string contents) : chars(contents), dirty(0) { updateRender(); }
 };
 
 class Editor {
   private:
   public:
-    // std::vector<std::shared_ptr<Line>> lines;
     std::vector<Line> lines;
     struct position cursor;
     std::string fileName;
@@ -182,20 +170,6 @@ class Editor {
     int numlines() { return static_cast<int>(lines.size()); }
 
     Line &lineat(int loc) { return lines[loc]; }
-
-    // void insertLine(int where, std::string contents) {
-    //     if (where < 0 || where > numlines())
-    //         return;
-    //
-    //     auto newline = std::make_shared<Line>(this, contents);
-    //     lines.insert(lines.begin() + where, newline);
-    //     edirty++;
-    // }
-    //
-    // void kill(const std::shared_ptr<Line> &line) {
-    //     lines.erase(std::remove(lines.begin(), lines.end(), line),
-    //     lines.end()); edirty++;
-    // }
 
     void open(const std::string &filepath) {
         const fs::path path(filepath);
