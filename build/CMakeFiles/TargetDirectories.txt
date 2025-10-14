@@ -1,0 +1,3 @@
+/Users/jerrylu/Documents/Projects/kiloo/build/CMakeFiles/main.dir
+/Users/jerrylu/Documents/Projects/kiloo/build/CMakeFiles/edit_cache.dir
+/Users/jerrylu/Documents/Projects/kiloo/build/CMakeFiles/rebuild_cache.dir

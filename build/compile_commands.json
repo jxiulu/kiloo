@@ -1,0 +1,8 @@
+[
+{
+  "directory": "/Users/jerrylu/Documents/Projects/kiloo/build",
+  "command": "/usr/bin/c++   -std=c++2b -arch arm64 -o CMakeFiles/main.dir/program.cpp.o -c /Users/jerrylu/Documents/Projects/kiloo/program.cpp",
+  "file": "/Users/jerrylu/Documents/Projects/kiloo/program.cpp",
+  "output": "CMakeFiles/main.dir/program.cpp.o"
+}
+]
