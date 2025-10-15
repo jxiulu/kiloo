@@ -47,15 +47,6 @@ constexpr int TAB_SIZE = 8;
 
 typedef int echar;
 
-void die(const std::string reason) {
-    write(STDOUT_FILENO, CLEARSCREEN, 4);
-    write(STDOUT_FILENO, RESETCURSOR, 3);
-    write(STDOUT_FILENO, LEAVEALTBUF, 7);
-    // clears screen on exit
-
-    throw std::runtime_error(reason);
-}
-
 struct thing {
     int x;
     int y;
@@ -133,24 +124,13 @@ class Line {
         dirty++;
     }
 
-    int getrx(int cx) {
-        int rx = 0;
-        int ci;
-
-        for (ci = 0; ci < cx; ci++) {
-            if (chars[ci] == '\t')
-                rx += (TAB_SIZE - 1) - (rx % TAB_SIZE);
-            rx++;
-        }
-
-        return rx;
-    }
-
     Line(std::string contents) : chars(contents), dirty(0) { updateRender(); }
 };
 
 class Editor {
   private:
+    int edirty;
+
   public:
     std::vector<Line> lines;
     struct editorspace {
@@ -158,9 +138,8 @@ class Editor {
         int charid;
     } pointer;
     std::string fileName;
-    int edirty;
 
-    Editor() : lines{}, pointer{0, 0}, fileName{}, edirty(0) {}
+    Editor() : edirty(0), lines{}, pointer{0, 0}, fileName{} {}
 
     int numlines() { return static_cast<int>(lines.size()); }
 
@@ -318,6 +297,14 @@ class Interface {
     static constexpr int QUIT_TIMES = 3;
     static constexpr int SBARHEIGHT = 2;
 
+    void die(const std::string reason) {
+        write(STDOUT_FILENO, CLEARSCREEN, 4);
+        write(STDOUT_FILENO, RESETCURSOR, 3);
+        write(STDOUT_FILENO, LEAVEALTBUF, 7);
+        disableRawMode();
+        throw std::runtime_error(reason);
+    }
+
     void updateIndex() {
         index.clear();
         if (viewsize.x <= 0 || editor.numlines() == 0) {
@@ -345,14 +332,68 @@ class Interface {
         }
     }
 
-    int widthofrow(int row) { return index[row].width; }
     int filledrows() { return static_cast<int>(index.size()); }
-    rowindex &row(int abs_y) {
+
+    rowindex &rowat(int abs_y) {
         int row = std::clamp(abs_y, 0, filledrows() - 1);
         return index[row];
     }
+
+    int get_width(int row) {
+        if (row < 0 || row >= filledrows())
+            return 0;
+        const rowindex &targetrow = rowat(row);
+        Line &corline = editor.line(targetrow.lineid);
+        const int width = std::max(0, corline.length() - targetrow.charid);
+        index[row].width = std::min(width, viewsize.x);
+        return index[row].width;
+
+        // gets the live width instead of a cached width inside of the index.
+    }
+    int find_width(int row) { return index[row].width; }
+
     int absy() { return cursor.y + viewoffset.y; }
     int absy(int y) { return y + viewoffset.y; }
+
+    int cur_charid() {
+        if (index.empty())
+            return 0;
+        return rowat(absy()).charid + cursor.x;
+    }
+
+    void move_to(int lineid, int charid) {
+        updateIndex();
+        if (index.empty())
+            return;
+
+        int targetrowid = 0;
+        for (int i = 0; i < filledrows(); i++) {
+            struct rowindex &entry = rowat(i);
+            if (entry.lineid != lineid)
+                continue;
+
+            const int width = get_width(i);
+            const int rowstart = entry.charid;
+            const int rowend = rowstart + width;
+            const bool lastrow =
+                (i + 1 >= filledrows()) || (rowat(i + 1).lineid != lineid);
+
+            if (charid < rowend || (charid == rowend && lastrow)) {
+                targetrowid = i;
+                cursor.x = std::clamp(charid - rowstart, 0, width);
+                break;
+            }
+        }
+
+        if (targetrowid < viewoffset.y)
+            viewoffset.y = targetrowid;
+        else if (targetrowid >= abs(viewsize.y)) {
+            viewoffset.y = targetrowid - viewsize.y + 1;
+        }
+
+        cursor.y = std::clamp(targetrowid - viewoffset.y, 0, viewsize.y - 1);
+        point();
+    }
 
     void scroll() {
         if (absy() < 0 || absy() >= filledrows())
@@ -374,7 +415,7 @@ class Interface {
             return;
         }
 
-        const rowindex &currentrow = row(absy());
+        const rowindex &currentrow = rowat(absy());
         Line &currentline = editor.line(currentrow.lineid);
         const int rctarget = currentrow.charid + cursor.x;
 
@@ -393,7 +434,7 @@ class Interface {
         editor.point(currentrow.lineid, cx);
     }
 
-    void moveCursor(echar key) {
+    void move_cursor(echar key) {
         updateIndex();
         if (index.empty()) {
             viewoffset.y = 0;
@@ -415,15 +456,20 @@ class Interface {
             if (cursor.x > 0) {
                 cursor.x--;
             } else if (clampedhigh) {
-                cursor.x = widthofrow(absy_temp);
+                cursor.x = get_width(absy_temp);
             } else if (absy_temp > 0) {
                 absy_temp--;
-                cursor.x = widthofrow(absy_temp);
+                cursor.x = get_width(absy_temp);
             }
             break;
         case RIGHTARROW:
-            if (cursor.x < widthofrow(absy_temp)) {
+            if (cursor.x < get_width(absy_temp)) {
                 cursor.x++;
+                if (cursor.x == find_width(absy_temp) &&
+                    absy_temp + 1 < filledrows()) {
+                    absy_temp++;
+                    cursor.x = 0;
+                }
             } else if (absy_temp + 1 < filledrows()) {
                 absy_temp++;
                 cursor.x = 0;
@@ -432,20 +478,20 @@ class Interface {
         case UPARROW:
             if (absy_temp > 0) {
                 absy_temp--;
-                cursor.x = std::min(cursor.x, widthofrow(absy_temp));
+                cursor.x = std::min(cursor.x, get_width(absy_temp));
             }
             break;
         case DOWNARROW:
             if (absy_temp + 1 < filledrows()) {
                 absy_temp++;
-                cursor.x = std::min(cursor.x, widthofrow(absy_temp));
+                cursor.x = std::min(cursor.x, get_width(absy_temp));
             }
             break;
         case HOME:
             cursor.x = 0;
             break;
         case END:
-            cursor.x = widthofrow(absy_temp);
+            cursor.x = get_width(absy_temp);
             break;
         }
 
@@ -455,7 +501,7 @@ class Interface {
             viewoffset.y = absy_temp - viewsize.y + 1;
 
         cursor.y = absy_temp - viewoffset.y;
-        cursor.x = std::clamp(cursor.x, 0, widthofrow(absy_temp));
+        cursor.x = std::clamp(cursor.x, 0, get_width(absy_temp));
         point();
     }
 
@@ -479,6 +525,11 @@ class Interface {
 
     void drawRows() {
         for (int viewrow = 0; viewrow < viewsize.y; viewrow++) {
+            out.append(
+                CLEARLINE); // CLEARLINE clears from the cursor to the left,
+                            // which may clear the last character of the column
+            // put it here to stop that from happening
+
             const int absrow = absy(viewrow);
             const bool coldopen = absrow >= filledrows();
 
@@ -492,12 +543,12 @@ class Interface {
                 const rowindex &currentrow = index[absrow];
                 Line &currentline = editor.line(currentrow.lineid);
 
-                const int width = std::min(currentrow.width, viewsize.x);
-                if (currentrow.charid < currentline.length() && width > 0)
+                const int width = get_width(absrow);
+                if (width > 0)
                     out.append(currentline.render, currentrow.charid, width);
             }
 
-            out.append(CLEARLINE).append("\r\n");
+            out.append("\r\n");
         }
     }
 
@@ -760,7 +811,7 @@ class Interface {
         return char_read;
     }
 
-    void processKeypress() {
+    void processKey() {
         echar key = readKey();
         static int quitrepeat = QUIT_TIMES;
 
@@ -790,15 +841,15 @@ class Interface {
         case CONTROL('h'):
         case DEL:
             if (key == DEL)
-                moveCursor(RIGHTARROW);
+                move_cursor(RIGHTARROW);
             editor.delChar();
-            moveCursor(LEFTARROW);
+            move_cursor(LEFTARROW);
             break;
 
         case '\r':
             editor.insNewLn();
-            moveCursor(DOWNARROW);
-            moveCursor(HOME);
+            move_cursor(DOWNARROW);
+            move_cursor(HOME);
             break;
 
         case PAGEUP:
@@ -813,13 +864,29 @@ class Interface {
         case RIGHTARROW:
         case UPARROW:
         case DOWNARROW:
-            moveCursor(key);
+            move_cursor(key);
             break;
 
         default:
+
+        {
+            const bool insertingTab = (key == '\t');
+            const int lineBefore = editor.pointer.lineid;
+            const int charBefore = editor.pointer.charid;
+            const int columnBefore = insertingTab ? cur_charid() : 0;
+
             editor.insChar(key);
-            moveCursor(RIGHTARROW);
+
+            if (insertingTab) {
+                const int tabStop = ((columnBefore / TAB_SIZE) + 1) * TAB_SIZE;
+                editor.point(lineBefore, charBefore + 1);
+                move_to(lineBefore, tabStop);
+            } else {
+                editor.point(lineBefore, charBefore + 1);
+                move_cursor(RIGHTARROW);
+            }
             break;
+        }
         }
 
         quitrepeat = QUIT_TIMES;
@@ -836,6 +903,9 @@ class Interface {
         scroll();
         out.append(HIDECURSOR);
         out.append(RESETCURSOR);
+
+        getWindowSize();
+        viewsize.y -= SBARHEIGHT;
 
         drawRows();
         drawStatusBar();
@@ -880,7 +950,7 @@ int main(int argc, char *argv[]) {
 
     while (true) {
         interface.drawScreen();
-        interface.processKeypress();
+        interface.processKey();
     }
 
     return 0;
