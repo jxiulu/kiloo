@@ -867,22 +867,20 @@ class Interface {
             move_cursor(key);
             break;
 
-        default:
-
-        {
-            const bool insertingTab = (key == '\t');
-            const int lineBefore = editor.pointer.lineid;
-            const int charBefore = editor.pointer.charid;
-            const int columnBefore = insertingTab ? cur_charid() : 0;
+        default: {
+            const bool tabbing = (key == '\t');
+            const int linern = editor.pointer.lineid;
+            const int charrn = editor.pointer.charid;
+            const int charidrn = tabbing ? cur_charid() : 0;
 
             editor.insChar(key);
 
-            if (insertingTab) {
-                const int tabStop = ((columnBefore / TAB_SIZE) + 1) * TAB_SIZE;
-                editor.point(lineBefore, charBefore + 1);
-                move_to(lineBefore, tabStop);
+            if (tabbing) {
+                const int tabStop = ((charidrn / TAB_SIZE) + 1) * TAB_SIZE;
+                editor.point(linern, charrn + 1);
+                move_to(linern, tabStop);
             } else {
-                editor.point(lineBefore, charBefore + 1);
+                editor.point(linern, charrn + 1);
                 move_cursor(RIGHTARROW);
             }
             break;
