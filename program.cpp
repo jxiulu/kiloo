@@ -75,7 +75,7 @@ class Line {
     int size() { return static_cast<int>(chars.size()); }
     int length() { return static_cast<int>(render.size()); }
 
-    void updateRender() {
+    void update_render() {
         // fills the render buffer
         int tabs = 0;
         int ci;
@@ -99,32 +99,32 @@ class Line {
         }
     }
 
-    void insChar(int loc, echar ch) {
+    void inschar(int loc, echar ch) {
         if (loc < 0 || loc > size())
             loc = size();
 
         chars.insert(loc, 1, ch);
-        updateRender();
+        update_render();
         dirty++;
     }
 
-    void delChar(int loc) {
+    void delchar(int loc) {
         if (loc < 0 || loc >= size())
             return;
 
         chars.erase(loc, 1);
-        updateRender();
+        update_render();
         dirty++;
     }
 
     void append(std::string str) {
         chars.append(str);
 
-        updateRender();
+        update_render();
         dirty++;
     }
 
-    Line(std::string contents) : chars(contents), dirty(0) { updateRender(); }
+    Line(std::string contents) : chars(contents), dirty(0) { update_render(); }
 };
 
 class Editor {
@@ -184,13 +184,13 @@ class Editor {
             // std::getline discards the delimiter '\n' by default
             if (!get.empty() && get.back() == '\r')
                 get.pop_back();
-            insLn(numlines(), get);
+            insln(numlines(), get);
         }
 
         clean();
     }
 
-    void delLn(int which) {
+    void delln(int which) {
         if (which < 0 || which >= numlines())
             return;
 
@@ -198,7 +198,7 @@ class Editor {
         edirty++;
     }
 
-    void insLn(int where, std::string contents) {
+    void insln(int where, std::string contents) {
         if (where < 0 || where > numlines())
             return;
 
@@ -207,28 +207,28 @@ class Editor {
         edirty++;
     }
 
-    void insChar(echar ch) {
+    void inschar(echar ch) {
         if (pointer.lineid == numlines()) {
-            insLn(numlines(), "");
+            insln(numlines(), "");
         }
 
-        lines[pointer.lineid].insChar(pointer.charid, ch);
+        lines[pointer.lineid].inschar(pointer.charid, ch);
     }
 
-    void insNewLn() {
+    void insnewln() {
         if (pointer.charid == 0) {
-            insLn(pointer.lineid, "");
+            insln(pointer.lineid, "");
         } else {
             Line &currentln = line(pointer.lineid);
             std::string fragment;
             fragment = currentln.chars.substr(pointer.charid);
             currentln.chars.erase(pointer.charid);
-            currentln.updateRender();
-            insLn(pointer.lineid + 1, std::move(fragment));
+            currentln.update_render();
+            insln(pointer.lineid + 1, std::move(fragment));
         }
     }
 
-    void delChar() {
+    void delchar() {
         if (pointer.lineid == numlines())
             return;
         if (pointer.charid == 0 && pointer.lineid == 0)
@@ -236,13 +236,13 @@ class Editor {
 
         Line &current = line(pointer.lineid);
         if (pointer.charid > 0) {
-            lines[pointer.lineid].delChar(pointer.charid - 1);
+            lines[pointer.lineid].delchar(pointer.charid - 1);
         } else {
             const int above = pointer.lineid - 1;
             Line &previous = line(above);
             pointer.charid = previous.size();
             previous.append(current.chars);
-            delLn(pointer.lineid);
+            delln(pointer.lineid);
             pointer.lineid = above;
         }
     }
@@ -272,373 +272,14 @@ class Editor {
     }
 };
 
-class Interface {
+class Terminal {
+  private:
+    thing winsize;
+    struct termios original;
+
   public:
-    struct termios originalTerminal;
-    std::string out;
-    std::string statusMsg;
-    std::chrono::steady_clock::time_point statusBorn;
-
-    Editor &editor;
-
-    struct thing viewoffset;
-    struct thing viewsize;
-    struct thing
-        cursor; // location of the cursor relative to the terminal window
-
-    struct rowindex {
-        int lineid;
-        int charid;
-        int width;
-    };
-    std::vector<struct rowindex> index;
-
-    static constexpr auto MSGLIF = std::chrono::seconds{5};
-    static constexpr int QUIT_TIMES = 3;
-    static constexpr int SBARHEIGHT = 2;
-
-    void die(const std::string reason) {
-        write(STDOUT_FILENO, CLEARSCREEN, 4);
-        write(STDOUT_FILENO, RESETCURSOR, 3);
-        write(STDOUT_FILENO, LEAVEALTBUF, 7);
-        disableRawMode();
-        throw std::runtime_error(reason);
-    }
-
-    void updateIndex() {
-        index.clear();
-        if (viewsize.x <= 0 || editor.numlines() == 0) {
-            return;
-        }
-
-        for (int lineid = 0; lineid < editor.numlines(); lineid++) {
-            Line &at = editor.line(lineid);
-            const int length = at.length();
-
-            if (length == 0) {
-                index.push_back(
-                    {lineid, 0, 0}); // empty lines still occupy a row
-                continue;
-            }
-
-            for (int charid = 0; charid < length; charid += viewsize.x) {
-                const int width = std::min(viewsize.x, length - charid);
-                index.push_back({lineid, charid, width});
-            }
-
-            if (length % viewsize.x == 0) {
-                index.push_back({lineid, length, 0});
-            }
-        }
-    }
-
-    int filledrows() { return static_cast<int>(index.size()); }
-
-    rowindex &rowat(int abs_y) {
-        int row = std::clamp(abs_y, 0, filledrows() - 1);
-        return index[row];
-    }
-
-    int get_width(int row) {
-        if (row < 0 || row >= filledrows())
-            return 0;
-        const rowindex &targetrow = rowat(row);
-        Line &corline = editor.line(targetrow.lineid);
-        const int width = std::max(0, corline.length() - targetrow.charid);
-        index[row].width = std::min(width, viewsize.x);
-        return index[row].width;
-
-        // gets the live width instead of a cached width inside of the index.
-    }
-    int find_width(int row) { return index[row].width; }
-
-    int absy() { return cursor.y + viewoffset.y; }
-    int absy(int y) { return y + viewoffset.y; }
-
-    int cur_charid() {
-        if (index.empty())
-            return 0;
-        return rowat(absy()).charid + cursor.x;
-    }
-
-    void move_to(int lineid, int charid) {
-        updateIndex();
-        if (index.empty())
-            return;
-
-        int targetrowid = 0;
-        for (int i = 0; i < filledrows(); i++) {
-            struct rowindex &entry = rowat(i);
-            if (entry.lineid != lineid)
-                continue;
-
-            const int width = get_width(i);
-            const int rowstart = entry.charid;
-            const int rowend = rowstart + width;
-            const bool lastrow =
-                (i + 1 >= filledrows()) || (rowat(i + 1).lineid != lineid);
-
-            if (charid < rowend || (charid == rowend && lastrow)) {
-                targetrowid = i;
-                cursor.x = std::clamp(charid - rowstart, 0, width);
-                break;
-            }
-        }
-
-        if (targetrowid < viewoffset.y)
-            viewoffset.y = targetrowid;
-        else if (targetrowid >= abs(viewsize.y)) {
-            viewoffset.y = targetrowid - viewsize.y + 1;
-        }
-
-        cursor.y = std::clamp(targetrowid - viewoffset.y, 0, viewsize.y - 1);
-        point();
-    }
-
-    void scroll() {
-        if (absy() < 0 || absy() >= filledrows())
-            return;
-
-        if (cursor.y < 0) {
-            viewoffset.y--;
-        }
-
-        if (cursor.y > viewsize.y) {
-            viewoffset.y++;
-        }
-    }
-
-    void point() {
-        if (index.empty()) {
-            if (editor.numlines() == 0)
-                editor.point(0, 0);
-            return;
-        }
-
-        const rowindex &currentrow = rowat(absy());
-        Line &currentline = editor.line(currentrow.lineid);
-        const int rctarget = currentrow.charid + cursor.x;
-
-        int rx = 0, cx = 0;
-        while (cx < currentline.size()) {
-            char c = currentline.chars[cx];
-            int progress = 1;
-            if (c == '\t')
-                progress += (TAB_SIZE - 1) - (rx % TAB_SIZE);
-            if (rx + progress > rctarget)
-                break;
-            rx += progress;
-            cx++;
-        }
-
-        editor.point(currentrow.lineid, cx);
-    }
-
-    void move_cursor(echar key) {
-        updateIndex();
-        if (index.empty()) {
-            viewoffset.y = 0;
-            cursor = {0, 0};
-            point();
-            return;
-        }
-
-        viewoffset.y =
-            std::clamp(viewoffset.y, 0, std::max(0, filledrows() - 1));
-
-        const int maxrow = filledrows() - 1;
-        const int originalrow = absy();
-        int absy_temp = std::clamp(originalrow, 0, maxrow);
-        const bool clampedhigh = originalrow > maxrow;
-
-        switch (key) {
-        case LEFTARROW:
-            if (cursor.x > 0) {
-                cursor.x--;
-            } else if (clampedhigh) {
-                cursor.x = get_width(absy_temp);
-            } else if (absy_temp > 0) {
-                absy_temp--;
-                cursor.x = get_width(absy_temp);
-            }
-            break;
-        case RIGHTARROW:
-            if (cursor.x < get_width(absy_temp)) {
-                cursor.x++;
-                if (cursor.x == find_width(absy_temp) &&
-                    absy_temp + 1 < filledrows()) {
-                    absy_temp++;
-                    cursor.x = 0;
-                }
-            } else if (absy_temp + 1 < filledrows()) {
-                absy_temp++;
-                cursor.x = 0;
-            }
-            break;
-        case UPARROW:
-            if (absy_temp > 0) {
-                absy_temp--;
-                cursor.x = std::min(cursor.x, get_width(absy_temp));
-            }
-            break;
-        case DOWNARROW:
-            if (absy_temp + 1 < filledrows()) {
-                absy_temp++;
-                cursor.x = std::min(cursor.x, get_width(absy_temp));
-            }
-            break;
-        case HOME:
-            cursor.x = 0;
-            break;
-        case END:
-            cursor.x = get_width(absy_temp);
-            break;
-        }
-
-        if (absy_temp < viewoffset.y)
-            viewoffset.y = absy_temp;
-        else if (absy_temp >= viewoffset.y + viewsize.y)
-            viewoffset.y = absy_temp - viewsize.y + 1;
-
-        cursor.y = absy_temp - viewoffset.y;
-        cursor.x = std::clamp(cursor.x, 0, get_width(absy_temp));
-        point();
-    }
-
-    void printWelcome() {
-        std::string msg = "Poop editor -- version " + VERSION;
-        int msglen = static_cast<int>(msg.size());
-
-        if (msglen > viewsize.x)
-            msg.resize(viewsize.x);
-
-        int padding = (viewsize.x - msglen) / 2;
-        if (padding) {
-            out.push_back('~');
-            padding--;
-        }
-        while (padding--)
-            out.push_back(' ');
-
-        out.append(msg);
-    }
-
-    void drawRows() {
-        for (int viewrow = 0; viewrow < viewsize.y; viewrow++) {
-            out.append(
-                CLEARLINE); // CLEARLINE clears from the cursor to the left,
-                            // which may clear the last character of the column
-            // put it here to stop that from happening
-
-            const int absrow = absy(viewrow);
-            const bool coldopen = absrow >= filledrows();
-
-            if (coldopen) {
-                if (editor.numlines() == 0 && viewrow == viewsize.y / 3) {
-                    printWelcome();
-                } else {
-                    out.push_back('~');
-                }
-            } else {
-                const rowindex &currentrow = index[absrow];
-                Line &currentline = editor.line(currentrow.lineid);
-
-                const int width = get_width(absrow);
-                if (width > 0)
-                    out.append(currentline.render, currentrow.charid, width);
-            }
-
-            out.append("\r\n");
-        }
-    }
-
-    void drawStatusBar() {
-        out.append(INVERTCOLOUR);
-        const std::string filename =
-            editor.fileName.empty() ? "[ no name ]" : editor.fileName;
-        const std::string modified = editor.dirty() ? "[ modified ]" : "";
-        const std::string left = filename + " - " +
-                                 std::to_string(editor.numlines()) + " lines " +
-                                 modified;
-        int leftlen = static_cast<int>(
-            left.size()); // this represents the entire left length
-
-        const std::string right = std::to_string(editor.pointer.lineid + 1) +
-                                  "/" + std::to_string(editor.numlines());
-        const int rightlen = static_cast<int>(right.size());
-        // cursor position is 0 indexed
-
-        out.append(left.substr(0, std::min(leftlen, viewsize.x)));
-
-        while (leftlen < viewsize.x) {
-            if (viewsize.x - leftlen == rightlen) {
-                out.append(right);
-                break;
-            } else {
-                out.push_back(' ');
-                leftlen++;
-            }
-        }
-
-        out.append(NORMALCOLOUR);
-        out.append("\r\n");
-    }
-
-    void drawMsgBar() {
-        out.append(CLEARLINE);
-        if (statusMsg.empty()) {
-            return;
-        }
-
-        if (std::chrono::steady_clock::now() - statusBorn > MSGLIF)
-            return;
-
-        out.append(statusMsg.substr(
-            0, std::min(viewsize.x, static_cast<int>(statusMsg.size()))));
-    }
-
-    void setStatusMsg(std::string msg) {
-        statusMsg = std::move(msg);
-        statusBorn = std::chrono::steady_clock::now();
-    }
-
-    std::optional<std::string> prompt(std::string msg) {
-        std::string input;
-        while (true) {
-            setStatusMsg(msg + input);
-            drawScreen();
-
-            echar c = readKey();
-            switch (c) {
-            case CONTROL('h'):
-            case BACKSPACE:
-            case DEL:
-                if (!input.empty())
-                    input.pop_back();
-                break;
-
-            case '\r':
-                if (!input.empty()) {
-                    setStatusMsg("");
-                    return input;
-                }
-                break;
-
-            case '\x1b':
-                setStatusMsg("");
-                return std::nullopt;
-                break;
-
-            default:
-                if (!iscntrl(c) && c < 128)
-                    input.push_back(static_cast<char>(c));
-                break;
-            }
-        }
-    }
-
-    bool getCursorPosition(int &x, int &y) {
-        char buf[32];
+    bool find_cursor(int &x, int &y) {
+        char seq[32];
         unsigned int index = 0;
 
         if (write(STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12)
@@ -646,44 +287,46 @@ class Interface {
         if (write(STDOUT_FILENO, "\x1b[6n", 4) != 4)
             return false;
 
-        while (index < sizeof(buf) - 1) {
-            if (read(STDIN_FILENO, &buf[index], 1) != 1)
+        while (index < sizeof(seq) - 1) {
+            if (read(STDIN_FILENO, &seq[index], 1) != 1)
                 break;
-            if (buf[index] == 'R')
+            if (seq[index] == 'R')
                 break;
             index++;
         }
 
-        buf[index] = '\0';
+        seq[index] = '\0';
 
-        if (buf[0] != '\x1b' || buf[1] != '[')
+        if (seq[0] != '\x1b' || seq[1] != '[')
             return false;
-        if (sscanf(&buf[2], "%d;%d", &y, &x) != 2)
+        if (sscanf(&seq[2], "%d;%d", &y, &x) != 2)
             return false;
         return true;
     }
 
-    bool getWindowSize() {
+    Terminal() {
+        if (tcgetattr(STDIN_FILENO, &original) == -1)
+            die("tcgettattr");
         struct winsize win;
 
-        if (ioctl(1 || STDOUT_FILENO, TIOCGWINSZ, &win) == -1 ||
-            win.ws_col == 0) {
-            return getCursorPosition(viewsize.x, viewsize.y);
+        if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &win) == -1 || win.ws_col == 0) {
+            find_cursor(winsize.x, winsize.y);
         } else {
-            viewsize.x = win.ws_col;
-            viewsize.y = win.ws_row;
-            return true;
+            winsize.x = win.ws_col;
+            winsize.y = win.ws_row;
         }
     }
 
-    void disableRawMode() {
+    struct thing window_size() { return winsize; }
+
+    void disable_raw() {
         write(STDOUT_FILENO, LEAVEALTBUF, 8);
-        if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &originalTerminal) == -1)
-            die("tcsetattr");
+        if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &original) == -1)
+            fdie("tcsetattr");
     }
 
-    void enableRawMode() {
-        struct termios newterm = originalTerminal;
+    void enable_raw() {
+        struct termios newterm = original;
         newterm.c_iflag &= ~(ICRNL | IXON | INPCK | ISTRIP | IXON);
         newterm.c_oflag &= ~(OPOST); // disable output processing
         newterm.c_cflag |= (CS8);
@@ -702,43 +345,28 @@ class Interface {
             die("tcsettattr");
     }
 
-    void save() {
-        if (editor.fileName.empty()) {
-            auto name = prompt("(ESC to exit) Save as: ");
-            if (!name) {
-                setStatusMsg("Save aborted");
-                return;
-            }
-            const fs::path path = *name;
-            editor.fileName = fs::weakly_canonical(fs::absolute(path)).string();
-        }
-
-        std::string dump = editor.dump();
-        std::ofstream out(editor.fileName, std::ios::binary | std::ios::trunc);
-        if (!out) {
-            setStatusMsg(std::string("save failed: ") + std::strerror(errno));
-            return;
-        }
-
-        out.write(dump.data(), static_cast<std::streamsize>(dump.size()));
-        if (!out) {
-            setStatusMsg(std::string("save failed: ") + std::strerror(errno));
-            return;
-        }
-
-        editor.clean();
-        setStatusMsg(std::to_string(dump.size()) + " bytes written to disk");
+    Terminal &send(std::string buf) {
+        write(STDOUT_FILENO, buf.c_str(), static_cast<int>(buf.size()));
+        return *this;
     }
 
-    echar readKey() {
+    std::string set_cursor(int x, int y) {
+        std::string cmd =
+            "\x1b[" + std::to_string(y + 1) + ";" + std::to_string(x + 1) + "H";
+        return cmd;
+    }
+
+    echar read_key() {
         int int_read;
         char char_read;
 
         // processing escape sequences
 
         while ((int_read = read(STDIN_FILENO, &char_read, 1)) != 1) {
-            if (int_read == -1 && errno != EAGAIN)
+            if (int_read == -1 && errno != EAGAIN) {
+                disable_raw();
                 die("read");
+            }
         }
 
         if (char_read == '\x1b') {
@@ -811,22 +439,424 @@ class Interface {
         return char_read;
     }
 
-    void processKey() {
-        echar key = readKey();
+    void fdie(const std::string reason) {
+        write(STDOUT_FILENO, CLEARSCREEN, 4);
+        write(STDOUT_FILENO, RESETCURSOR, 3);
+        write(STDOUT_FILENO, LEAVEALTBUF, 7);
+        throw std::runtime_error(reason);
+    }
+
+    void die(const std::string reason) {
+        write(STDOUT_FILENO, CLEARSCREEN, 4);
+        write(STDOUT_FILENO, RESETCURSOR, 3);
+        write(STDOUT_FILENO, LEAVEALTBUF, 7);
+        disable_raw();
+        throw std::runtime_error(reason);
+    }
+};
+
+class Interface {
+  private:
+    Terminal &terminal;
+    Editor &editor;
+
+  public:
+    std::string outbuf;
+    std::string statusmsg;
+    std::chrono::steady_clock::time_point status_born;
+
+    struct thing view_offset;
+    struct thing view_size;
+    struct thing
+        cursor; // location of the cursor relative to the terminal window
+
+    struct rowindex {
+        int lineid;
+        int charid;
+        int width;
+    };
+    std::vector<struct rowindex> index;
+
+    static constexpr auto MSGLIF = std::chrono::seconds{5};
+    static constexpr int QUIT_TIMES = 3;
+    static constexpr int SBARHEIGHT = 2;
+
+    void update_index() {
+        index.clear();
+        if (view_size.x <= 0 || editor.numlines() == 0) {
+            return;
+        }
+
+        for (int lineid = 0; lineid < editor.numlines(); lineid++) {
+            Line &at = editor.line(lineid);
+            const int length = at.length();
+
+            if (length == 0) {
+                index.push_back(
+                    {lineid, 0, 0}); // empty lines still occupy a row
+                continue;
+            }
+
+            for (int charid = 0; charid < length; charid += view_size.x) {
+                const int width = std::min(view_size.x, length - charid);
+                index.push_back({lineid, charid, width});
+            }
+
+            if (length % view_size.x == 0) {
+                index.push_back({lineid, length, 0});
+            }
+        }
+    }
+
+    int filled_rows() { return static_cast<int>(index.size()); }
+
+    rowindex &row_at(int abs_y) {
+        int row = std::clamp(abs_y, 0, filled_rows() - 1);
+        return index[row];
+    }
+
+    int get_width(int row) {
+        if (row < 0 || row >= filled_rows())
+            return 0;
+        const rowindex &targetrow = row_at(row);
+        Line &corline = editor.line(targetrow.lineid);
+        const int width = std::max(0, corline.length() - targetrow.charid);
+        index[row].width = std::min(width, view_size.x);
+        return index[row].width;
+
+        // gets the live width instead of a cached width inside of the index.
+    }
+    int find_width(int row) { return index[row].width; }
+
+    int absy() { return cursor.y + view_offset.y; }
+    int absy(int y) { return y + view_offset.y; }
+
+    int current_charid() {
+        if (index.empty())
+            return 0;
+        return row_at(absy()).charid + cursor.x;
+    }
+
+    void move_cursor(int lineid, int charid) {
+        update_index();
+        if (index.empty())
+            return;
+
+        int targetrowid = 0;
+        for (int i = 0; i < filled_rows(); i++) {
+            struct rowindex &entry = row_at(i);
+            if (entry.lineid != lineid)
+                continue;
+
+            const int width = get_width(i);
+            const int rowstart = entry.charid;
+            const int rowend = rowstart + width;
+            const bool lastrow =
+                (i + 1 >= filled_rows()) || (row_at(i + 1).lineid != lineid);
+
+            if (charid < rowend || (charid == rowend && lastrow)) {
+                targetrowid = i;
+                cursor.x = std::clamp(charid - rowstart, 0, width);
+                break;
+            }
+        }
+
+        if (targetrowid < view_offset.y)
+            view_offset.y = targetrowid;
+        else if (targetrowid >= abs(view_size.y)) {
+            view_offset.y = targetrowid - view_size.y + 1;
+        }
+
+        cursor.y = std::clamp(targetrowid - view_offset.y, 0, view_size.y - 1);
+        point_editor();
+    }
+
+    void scroll() {
+        if (absy() < 0 || absy() >= filled_rows())
+            return;
+
+        if (cursor.y < 0) {
+            view_offset.y--;
+        }
+
+        if (cursor.y > view_size.y) {
+            view_offset.y++;
+        }
+    }
+
+    void point_editor() {
+        if (index.empty()) {
+            if (editor.numlines() == 0)
+                editor.point(0, 0);
+            return;
+        }
+
+        const rowindex &currentrow = row_at(absy());
+        Line &currentline = editor.line(currentrow.lineid);
+        const int rctarget = currentrow.charid + cursor.x;
+
+        int rx = 0, cx = 0;
+        while (cx < currentline.size()) {
+            char c = currentline.chars[cx];
+            int progress = 1;
+            if (c == '\t')
+                progress += (TAB_SIZE - 1) - (rx % TAB_SIZE);
+            if (rx + progress > rctarget)
+                break;
+            rx += progress;
+            cx++;
+        }
+
+        editor.point(currentrow.lineid, cx);
+    }
+
+    void move_cursor(echar key) {
+        update_index();
+        if (index.empty()) {
+            view_offset.y = 0;
+            cursor = {0, 0};
+            point_editor();
+            return;
+        }
+
+        view_offset.y =
+            std::clamp(view_offset.y, 0, std::max(0, filled_rows() - 1));
+
+        const int maxrow = filled_rows() - 1;
+        const int originalrow = absy();
+        int absy_temp = std::clamp(originalrow, 0, maxrow);
+        const bool clampedhigh = originalrow > maxrow;
+
+        switch (key) {
+        case LEFTARROW:
+            if (cursor.x > 0) {
+                cursor.x--;
+            } else if (clampedhigh) {
+                cursor.x = get_width(absy_temp);
+            } else if (absy_temp > 0) {
+                absy_temp--;
+                cursor.x = get_width(absy_temp);
+            }
+            break;
+        case RIGHTARROW:
+            if (cursor.x < get_width(absy_temp)) {
+                cursor.x++;
+                if (cursor.x == find_width(absy_temp) &&
+                    absy_temp + 1 < filled_rows()) {
+                    absy_temp++;
+                    cursor.x = 0;
+                }
+            } else if (absy_temp + 1 < filled_rows()) {
+                absy_temp++;
+                cursor.x = 0;
+            }
+            break;
+        case UPARROW:
+            if (absy_temp > 0) {
+                absy_temp--;
+                cursor.x = std::min(cursor.x, get_width(absy_temp));
+            }
+            break;
+        case DOWNARROW:
+            if (absy_temp + 1 < filled_rows()) {
+                absy_temp++;
+                cursor.x = std::min(cursor.x, get_width(absy_temp));
+            }
+            break;
+        case HOME:
+            cursor.x = 0;
+            break;
+        case END:
+            cursor.x = get_width(absy_temp);
+            break;
+        }
+
+        if (absy_temp < view_offset.y)
+            view_offset.y = absy_temp;
+        else if (absy_temp >= view_offset.y + view_size.y)
+            view_offset.y = absy_temp - view_size.y + 1;
+
+        cursor.y = absy_temp - view_offset.y;
+        cursor.x = std::clamp(cursor.x, 0, get_width(absy_temp));
+        point_editor();
+    }
+
+    void print_welcomemsg() {
+        std::string msg = "Poop editor -- version " + VERSION;
+        int msglen = static_cast<int>(msg.size());
+
+        if (msglen > view_size.x)
+            msg.resize(view_size.x);
+
+        int padding = (view_size.x - msglen) / 2;
+        if (padding) {
+            outbuf.push_back('~');
+            padding--;
+        }
+        while (padding--)
+            outbuf.push_back(' ');
+
+        outbuf.append(msg);
+    }
+
+    void draw_rows() {
+        for (int viewrow = 0; viewrow < view_size.y; viewrow++) {
+            outbuf.append(
+                CLEARLINE); // CLEARLINE clears from the cursor to the left,
+                            // which may clear the last character of the column
+            // put it here to stop that from happening
+
+            const int absrow = absy(viewrow);
+            const bool coldopen = absrow >= filled_rows();
+
+            if (coldopen) {
+                if (editor.numlines() == 0 && viewrow == view_size.y / 3) {
+                    print_welcomemsg();
+                } else {
+                    outbuf.push_back('~');
+                }
+            } else {
+                const rowindex &currentrow = index[absrow];
+                Line &currentline = editor.line(currentrow.lineid);
+
+                const int width = get_width(absrow);
+                if (width > 0)
+                    outbuf.append(currentline.render, currentrow.charid, width);
+            }
+
+            outbuf.append("\r\n");
+        }
+    }
+
+    void draw_statusbar() {
+        outbuf.append(INVERTCOLOUR);
+        const std::string filename =
+            editor.fileName.empty() ? "[ no name ]" : editor.fileName;
+        const std::string modified = editor.dirty() ? "[ modified ]" : "";
+        const std::string left = filename + " - " +
+                                 std::to_string(editor.numlines()) + " lines " +
+                                 modified;
+        int leftlen = static_cast<int>(
+            left.size()); // this represents the entire left length
+
+        const std::string right = std::to_string(editor.pointer.lineid + 1) +
+                                  "/" + std::to_string(editor.numlines());
+        const int rightlen = static_cast<int>(right.size());
+        // cursor position is 0 indexed
+
+        outbuf.append(left.substr(0, std::min(leftlen, view_size.x)));
+
+        while (leftlen < view_size.x) {
+            if (view_size.x - leftlen == rightlen) {
+                outbuf.append(right);
+                break;
+            } else {
+                outbuf.push_back(' ');
+                leftlen++;
+            }
+        }
+
+        outbuf.append(NORMALCOLOUR);
+        outbuf.append("\r\n");
+    }
+
+    void draw_msgbar() {
+        outbuf.append(CLEARLINE);
+        if (statusmsg.empty()) {
+            return;
+        }
+
+        if (std::chrono::steady_clock::now() - status_born > MSGLIF)
+            return;
+
+        outbuf.append(statusmsg.substr(
+            0, std::min(view_size.x, static_cast<int>(statusmsg.size()))));
+    }
+
+    void set_statusmsg(std::string msg) {
+        statusmsg = std::move(msg);
+        status_born = std::chrono::steady_clock::now();
+    }
+
+    std::optional<std::string> prompt(std::string msg) {
+        std::string input;
+        while (true) {
+            set_statusmsg(msg + input);
+            draw_screen();
+
+            echar c = terminal.read_key();
+            switch (c) {
+            case CONTROL('h'):
+            case BACKSPACE:
+            case DEL:
+                if (!input.empty())
+                    input.pop_back();
+                break;
+
+            case '\r':
+                if (!input.empty()) {
+                    set_statusmsg("");
+                    return input;
+                }
+                break;
+
+            case '\x1b':
+                set_statusmsg("");
+                return std::nullopt;
+                break;
+
+            default:
+                if (!iscntrl(c) && c < 128)
+                    input.push_back(static_cast<char>(c));
+                break;
+            }
+        }
+    }
+
+    void save() {
+        if (editor.fileName.empty()) {
+            auto name = prompt("(ESC to exit) Save as: ");
+            if (!name) {
+                set_statusmsg("Save aborted");
+                return;
+            }
+            const fs::path path = *name;
+            editor.fileName = fs::weakly_canonical(fs::absolute(path)).string();
+        }
+
+        std::string dump = editor.dump();
+        std::ofstream out(editor.fileName, std::ios::binary | std::ios::trunc);
+        if (!out) {
+            set_statusmsg(std::string("save failed: ") + std::strerror(errno));
+            return;
+        }
+
+        out.write(dump.data(), static_cast<std::streamsize>(dump.size()));
+        if (!out) {
+            set_statusmsg(std::string("save failed: ") + std::strerror(errno));
+            return;
+        }
+
+        editor.clean();
+        set_statusmsg(std::to_string(dump.size()) + " bytes written to disk");
+    }
+
+    void process_key() {
+        echar key = terminal.read_key();
         static int quitrepeat = QUIT_TIMES;
 
         switch (key) {
         case CONTROL('q'):
             if (editor.dirty() && quitrepeat > 0) {
-                setStatusMsg("File has unsaved changes. Press ^Q " +
-                             std::to_string(quitrepeat) +
-                             " more times to quit.");
+                set_statusmsg("File has unsaved changes. Press ^Q " +
+                              std::to_string(quitrepeat) +
+                              " more times to quit.");
                 quitrepeat--;
                 return;
             }
-
-            write(STDOUT_FILENO, CLEARSCREEN, sizeof(CLEARSCREEN) - 1);
-            write(STDOUT_FILENO, RESETCURSOR, sizeof(RESETCURSOR) - 1);
+            terminal.disable_raw();
+            terminal.send(CLEARSCREEN);
+            terminal.send(RESETCURSOR);
             exit(0);
             break;
         case CONTROL('s'):
@@ -842,12 +872,12 @@ class Interface {
         case DEL:
             if (key == DEL)
                 move_cursor(RIGHTARROW);
-            editor.delChar();
+            editor.delchar();
             move_cursor(LEFTARROW);
             break;
 
         case '\r':
-            editor.insNewLn();
+            editor.insnewln();
             move_cursor(DOWNARROW);
             move_cursor(HOME);
             break;
@@ -871,14 +901,14 @@ class Interface {
             const bool tabbing = (key == '\t');
             const int linern = editor.pointer.lineid;
             const int charrn = editor.pointer.charid;
-            const int charidrn = tabbing ? cur_charid() : 0;
+            const int charidrn = tabbing ? current_charid() : 0;
 
-            editor.insChar(key);
+            editor.inschar(key);
 
             if (tabbing) {
                 const int tabStop = ((charidrn / TAB_SIZE) + 1) * TAB_SIZE;
                 editor.point(linern, charrn + 1);
-                move_to(linern, tabStop);
+                move_cursor(linern, tabStop);
             } else {
                 editor.point(linern, charrn + 1);
                 move_cursor(RIGHTARROW);
@@ -888,58 +918,51 @@ class Interface {
         }
 
         quitrepeat = QUIT_TIMES;
-        updateIndex();
+        update_index();
     }
 
-    void setCursor() {
-        std::string cmd = "\x1b[" + std::to_string(cursor.y + 1) + ";" +
-                          std::to_string(cursor.x + 1) + "H";
-        out.append(cmd);
-    }
-
-    void drawScreen() {
+    void draw_screen() {
         scroll();
-        out.append(HIDECURSOR);
-        out.append(RESETCURSOR);
+        outbuf.append(HIDECURSOR);
+        outbuf.append(RESETCURSOR);
 
-        getWindowSize();
-        viewsize.y -= SBARHEIGHT;
+        view_size = terminal.window_size();
+        view_size.y -= SBARHEIGHT;
 
-        drawRows();
-        drawStatusBar();
-        drawMsgBar();
-        setCursor();
+        draw_rows();
+        draw_statusbar();
+        draw_msgbar();
 
-        out.append(SHOWCURSOR);
+        outbuf.append(terminal.set_cursor(cursor.x, cursor.y));
+        outbuf.append(SHOWCURSOR);
 
-        write(STDOUT_FILENO, out.c_str(), static_cast<int>(out.size()));
-        out.clear();
+        terminal.send(outbuf);
+
+        outbuf.clear();
     }
 
-    Interface(Editor &editor)
-        : statusMsg(""), statusBorn(std::chrono::steady_clock::now()),
-          editor(editor), viewoffset{0, 0}, viewsize{0, 0}, cursor{0, 0} {
-        if (tcgetattr(STDIN_FILENO, &originalTerminal) == -1)
-            die("tcgettattr");
-        getWindowSize();
+    Interface(Editor &editor, Terminal &terminal)
+        : terminal(terminal), statusmsg(""),
+          status_born(std::chrono::steady_clock::now()), editor(editor),
+          view_offset{0, 0}, view_size{0, 0}, cursor{0, 0} {
+        view_size = terminal.window_size();
+        view_size.y -= SBARHEIGHT;
+        index.reserve(view_size.y);
 
-        viewsize.y -= SBARHEIGHT;
-        index.reserve(viewsize.y);
+        terminal.enable_raw();
+        terminal.send(CLEARSCREEN);
+        terminal.send(RESETCURSOR);
 
-        enableRawMode();
-        // write(STDOUT_FILENO, ENTERALTBUF, 8);
-        write(STDOUT_FILENO, CLEARSCREEN, 4);
-        write(STDOUT_FILENO, RESETCURSOR, 3);
-
-        setStatusMsg("^Q to quit | ^S to save");
+        set_statusmsg("^Q to quit | ^S to save");
     }
 
-    ~Interface() { disableRawMode(); }
+    ~Interface() { terminal.disable_raw(); }
 };
 
 int main(int argc, char *argv[]) {
     Editor editor;
-    Interface interface(editor);
+    Terminal terminal;
+    Interface interface(editor, terminal);
 
     if (argc >= 2) {
         fs::path file(argv[1]);
@@ -947,8 +970,8 @@ int main(int argc, char *argv[]) {
     }
 
     while (true) {
-        interface.drawScreen();
-        interface.processKey();
+        interface.draw_screen();
+        interface.process_key();
     }
 
     return 0;
