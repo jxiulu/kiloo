@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/Users/jerrylu/Documents/Projects/autotools/build/_deps/std-subbuild/CMakeFiles/std-populate"
+		},
+		{
+			"file" : "/Users/jerrylu/Documents/Projects/autotools/build/_deps/std-subbuild/CMakeFiles/std-populate.rule"
+		},
+		{
+			"file" : "/Users/jerrylu/Documents/Projects/autotools/build/_deps/std-subbuild/CMakeFiles/std-populate-complete.rule"
+		},
+		{
+			"file" : "/Users/jerrylu/Documents/Projects/autotools/build/_deps/std-subbuild/std-populate-prefix/src/std-populate-stamp/std-populate-build.rule"
+		},
+		{
+			"file" : "/Users/jerrylu/Documents/Projects/autotools/build/_deps/std-subbuild/std-populate-prefix/src/std-populate-stamp/std-populate-configure.rule"
+		},
+		{
+			"file" : "/Users/jerrylu/Documents/Projects/autotools/build/_deps/std-subbuild/std-populate-prefix/src/std-populate-stamp/std-populate-download.rule"
+		},
+		{
+			"file" : "/Users/jerrylu/Documents/Projects/autotools/build/_deps/std-subbuild/std-populate-prefix/src/std-populate-stamp/std-populate-install.rule"
+		},
+		{
+			"file" : "/Users/jerrylu/Documents/Projects/autotools/build/_deps/std-subbuild/std-populate-prefix/src/std-populate-stamp/std-populate-mkdir.rule"
+		},
+		{
+			"file" : "/Users/jerrylu/Documents/Projects/autotools/build/_deps/std-subbuild/std-populate-prefix/src/std-populate-stamp/std-populate-patch.rule"
+		},
+		{
+			"file" : "/Users/jerrylu/Documents/Projects/autotools/build/_deps/std-subbuild/std-populate-prefix/src/std-populate-stamp/std-populate-test.rule"
+		},
+		{
+			"file" : "/Users/jerrylu/Documents/Projects/autotools/build/_deps/std-subbuild/std-populate-prefix/src/std-populate-stamp/std-populate-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"std-populate"
+		],
+		"name" : "std-populate"
+	}
+}

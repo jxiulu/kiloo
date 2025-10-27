@@ -1,0 +1,6 @@
+/Users/jerrylu/Documents/Projects/autotools/build/CMakeFiles/terminal.dir
+/Users/jerrylu/Documents/Projects/autotools/build/CMakeFiles/core.dir
+/Users/jerrylu/Documents/Projects/autotools/build/CMakeFiles/ai_ext.dir
+/Users/jerrylu/Documents/Projects/autotools/build/CMakeFiles/main.dir
+/Users/jerrylu/Documents/Projects/autotools/build/CMakeFiles/edit_cache.dir
+/Users/jerrylu/Documents/Projects/autotools/build/CMakeFiles/rebuild_cache.dir

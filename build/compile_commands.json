@@ -1,0 +1,8 @@
+[
+{
+  "directory": "/Users/jerrylu/Documents/Projects/autotools/build",
+  "command": "/usr/bin/c++ -I/Users/jerrylu/Documents/Projects/autotools/core -I/Users/jerrylu/Documents/Projects/autotools/ext -isystem /opt/homebrew/include -std=gnu++2b -arch arm64 -o CMakeFiles/main.dir/core/main.cpp.o -c /Users/jerrylu/Documents/Projects/autotools/core/main.cpp",
+  "file": "/Users/jerrylu/Documents/Projects/autotools/core/main.cpp",
+  "output": "/Users/jerrylu/Documents/Projects/autotools/build/CMakeFiles/main.dir/core/main.cpp.o"
+}
+]

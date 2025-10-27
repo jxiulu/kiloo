@@ -1,0 +1,11 @@
+ecks: >
+  bugprone-*,
+  clang-analyzer-*,
+  concurrency-*,
+  cppcoreguidelines-*,
+  google-*,
+  modernize-*,
+  performance-*,
+  misc-*,
+HeaderFilterRegex: '.*'
+WarningsAsErrors: ''
