@@ -104,25 +104,28 @@ class Line {
 class Editor {
   private:
     int edirty;
-
-  public:
     std::vector<Line> lines;
     struct editorspace {
         int lineid;
         int charid;
     } pointer;
+
+  public:
     std::string fileName;
 
     Editor() : edirty(0), lines{}, pointer{0, 0}, fileName{} {}
 
     int numlines() { return static_cast<int>(lines.size()); }
 
-    Line &line_at(int id) {
+    int pointer_linepos() { return pointer.lineid; }
+    int pointer_charpos() { return pointer.charid; }
+
+    Line &line_at(int index) {
         if (lines.empty()) {
-            throw std::out_of_range("line(): no lines to reference!");
+            throw std::out_of_range("line_index(): no lines to reference!");
         } // dereferencing a nonexistent line will crash
-        id = std::clamp(id, 0, numlines() - 1);
-        return lines[id];
+        index = std::clamp(index, 0, numlines() - 1);
+        return lines[index];
     }
 
     void point(int lineid, int charid) {
@@ -137,7 +140,7 @@ class Editor {
             return;
         }
 
-        charid = std::clamp(charid, 0, line_at(lineid).size());
+        charid = std::clamp(charid, 0, lines[lineid].size());
         pointer = {lineid, charid};
     }
 

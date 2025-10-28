@@ -10,9 +10,9 @@ find_package(nlohmann_json REQUIRED)
 
 add_library(terminal INTERFACE core/terminal.hpp)
 
-add_library(core INTERFACE core/editor.hpp core/tui.hpp core/extensions.cpp
-            core/extensions.hpp)
+add_library(core core/editor.hpp core/tui.cpp core/extensions.cpp)
 target_include_directories(core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/core)
+target_link_libraries(core terminal)
 
 add_library(ai_ext INTERFACE ext/ai.hpp)
 target_include_directories(ai_ext INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/ext

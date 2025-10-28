@@ -41,11 +41,42 @@ cmake_ninja_workdir = /Users/jerrylu/Documents/Projects/autotools/build/
 
 build terminal: phony
 
+# =============================================================================
+# Object build statements for STATIC_LIBRARY target core
+
 
 #############################################
-# Utility command for core
+# Order-only phony target for core
 
-build core: phony
+build cmake_object_order_depends_target_core: phony || terminal
+
+build CMakeFiles/core.dir/core/tui.cpp.o: CXX_COMPILER__core_unscanned_ /Users/jerrylu/Documents/Projects/autotools/core/tui.cpp || cmake_object_order_depends_target_core
+  DEP_FILE = CMakeFiles/core.dir/core/tui.cpp.o.d
+  FLAGS = -std=gnu++2b -arch arm64
+  OBJECT_DIR = CMakeFiles/core.dir
+  OBJECT_FILE_DIR = CMakeFiles/core.dir/core
+
+build CMakeFiles/core.dir/core/extensions.cpp.o: CXX_COMPILER__core_unscanned_ /Users/jerrylu/Documents/Projects/autotools/core/extensions.cpp || cmake_object_order_depends_target_core
+  DEP_FILE = CMakeFiles/core.dir/core/extensions.cpp.o.d
+  FLAGS = -std=gnu++2b -arch arm64
+  OBJECT_DIR = CMakeFiles/core.dir
+  OBJECT_FILE_DIR = CMakeFiles/core.dir/core
+
+
+# =============================================================================
+# Link build statements for STATIC_LIBRARY target core
+
+
+#############################################
+# Link the static library libcore.a
+
+build libcore.a: CXX_STATIC_LIBRARY_LINKER__core_ CMakeFiles/core.dir/core/tui.cpp.o CMakeFiles/core.dir/core/extensions.cpp.o || terminal
+  ARCH_FLAGS = -arch arm64
+  OBJECT_DIR = CMakeFiles/core.dir
+  POST_BUILD = :
+  PRE_LINK = :
+  TARGET_FILE = libcore.a
+  TARGET_PDB = core.a.dbg
 
 
 #############################################
@@ -60,7 +91,7 @@ build ai_ext: phony
 #############################################
 # Order-only phony target for main
 
-build cmake_object_order_depends_target_main: phony || ai_ext core
+build cmake_object_order_depends_target_main: phony || ai_ext cmake_object_order_depends_target_core terminal
 
 build CMakeFiles/main.dir/core/main.cpp.o: CXX_COMPILER__main_unscanned_ /Users/jerrylu/Documents/Projects/autotools/core/main.cpp || cmake_object_order_depends_target_main
   DEP_FILE = CMakeFiles/main.dir/core/main.cpp.o.d
@@ -77,9 +108,10 @@ build CMakeFiles/main.dir/core/main.cpp.o: CXX_COMPILER__main_unscanned_ /Users/
 #############################################
 # Link the executable main
 
-build main: CXX_EXECUTABLE_LINKER__main_ CMakeFiles/main.dir/core/main.cpp.o || ai_ext core
+build main: CXX_EXECUTABLE_LINKER__main_ CMakeFiles/main.dir/core/main.cpp.o | libcore.a || ai_ext libcore.a terminal
   FLAGS = -arch arm64
   LINK_FLAGS = -Wl,-search_paths_first -Wl,-headerpad_max_install_names
+  LINK_LIBRARIES = libcore.a
   OBJECT_DIR = CMakeFiles/main.dir
   POST_BUILD = :
   PRE_LINK = :
@@ -113,6 +145,8 @@ build rebuild_cache: phony CMakeFiles/rebuild_cache.util
 # =============================================================================
 # Target aliases.
 
+build core: phony libcore.a
+
 # =============================================================================
 # Folder targets.
 
@@ -121,7 +155,7 @@ build rebuild_cache: phony CMakeFiles/rebuild_cache.util
 #############################################
 # Folder: /Users/jerrylu/Documents/Projects/autotools/build
 
-build all: phony terminal core ai_ext main
+build all: phony terminal libcore.a ai_ext main
 
 # =============================================================================
 # Built-in targets

@@ -12,7 +12,7 @@ int main(int argc, char *argv[]) {
 
     while (true) {
         ui.draw_screen();
-        ui.process_key();
+        ui.receive_input();
     }
 
     return 0;

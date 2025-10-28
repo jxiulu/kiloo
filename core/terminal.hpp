@@ -302,6 +302,7 @@ inline Terminal &enter_alternate_buffer(Terminal &t) {
 inline Terminal &leave_alternate_buffer(Terminal &t) {
     return t.append(LEAVEALTBUF);
 }
+
 inline Terminal &reset_cursor(Terminal &t) { return t.append(RESETCURSOR); }
 inline Terminal &wipe_scrollback(Terminal &t) {
     return t.append(WIPESCROLLBACK);
